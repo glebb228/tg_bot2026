@@ -1559,7 +1559,7 @@ def get_progress_stats(session: Session, telegram_id: int) -> ProgressStats:
         .where(UserWord.user_id == user.id, WordSet.language == language)
     ) or 0
 
-    today = datetime.now().date().isoformat()
+    today = datetime.now().date()
     today_attempts = session.scalar(
         select(func.count(QuizAttempt.id)).where(
             QuizAttempt.user_id == user.id,
