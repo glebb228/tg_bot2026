@@ -5,3 +5,6 @@ __pycache__/
 bot.sqlite3
 .DS_Store
 .idea/
+presentation/node_modules/
+presentation/scratch/
+presentation/output/output.pptx
