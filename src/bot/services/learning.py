@@ -1610,7 +1610,11 @@ def get_progress_stats(session: Session, telegram_id: int) -> ProgressStats:
             func.coalesce(func.sum(QuizAttempt.total_questions), 0),
         )
         .join(QuizAttempt, QuizAttempt.word_set_id == WordSet.id)
-        .where(QuizAttempt.user_id == user.id, WordSet.language == language)
+        .where(
+            QuizAttempt.user_id == user.id,
+            WordSet.language == language,
+            WordSet.is_system.is_(True),
+        )
         .group_by(WordSet.id)
     ).all()
     set_scores = [
