@@ -37,6 +37,11 @@ LANGUAGE_EXAMPLE_TEMPLATES = {
     "Spanish": "Uso «{word}» en una conversación real.",
     "Italian": "Uso «{word}» in una conversazione reale.",
 }
+CUSTOM_WORD_EXAMPLE_TEMPLATES = {
+    "English": "I want to remember the word «{word}».",
+    "Spanish": "Quiero recordar la palabra «{word}».",
+    "Italian": "Voglio ricordare la parola «{word}».",
+}
 
 DEFAULT_WORD_SETS = [
     {
@@ -719,6 +724,41 @@ def build_language_example(language: str, foreign_word: str, original_example: s
     return LANGUAGE_EXAMPLE_TEMPLATES[language].format(word=foreign_word)
 
 
+def build_custom_word_example(language: str, foreign_word: str) -> str:
+    template = CUSTOM_WORD_EXAMPLE_TEMPLATES.get(
+        language,
+        CUSTOM_WORD_EXAMPLE_TEMPLATES["English"],
+    )
+    return template.format(word=foreign_word)
+
+
+def build_answer_options(
+    seed: str,
+    correct_translation: str,
+    candidate_translations: list[str],
+) -> list[str]:
+    question_random = random.Random(seed)
+    seen = {correct_translation}
+    distractor_pool = []
+    for translation in candidate_translations:
+        if translation in seen:
+            continue
+        seen.add(translation)
+        distractor_pool.append(translation)
+
+    distractors = question_random.sample(distractor_pool, k=min(3, len(distractor_pool)))
+    while len(distractors) < 3:
+        fallback = f"Вариант {len(distractors) + 1}"
+        while fallback in seen:
+            fallback = f"Вариант {len(seen) + 1}"
+        seen.add(fallback)
+        distractors.append(fallback)
+
+    options = distractors + [correct_translation]
+    question_random.shuffle(options)
+    return options
+
+
 def localize_word_set(word_set_data: dict, language: str) -> dict:
     if language == "English":
         return {
@@ -1151,12 +1191,13 @@ def create_custom_word_for_user(
         )
         or 0
     ) + 1
+    prepared_word = foreign_word.strip()
     card = WordCard(
         word_set_id=word_set.id,
         position=next_position,
-        foreign_word=foreign_word.strip(),
+        foreign_word=prepared_word,
         translation=translation.strip(),
-        example=example.strip() or f"I want to remember the word {foreign_word.strip()}.",
+        example=example.strip() or build_custom_word_example(language, prepared_word),
     )
     session.add(card)
     session.flush()
@@ -1226,14 +1267,12 @@ def build_quiz_question(
         return None
 
     current_card = cards[position - 1]
-    question_random = random.Random(f"{set_code}:{position}:{current_card.id}")
     all_translations = [card.translation for card in cards if card.id != current_card.id]
-    distractors = question_random.sample(all_translations, k=min(3, len(all_translations)))
-    while len(distractors) < 3:
-        distractors.append(f"Вариант {len(distractors) + 1}")
-
-    options = distractors + [current_card.translation]
-    question_random.shuffle(options)
+    options = build_answer_options(
+        f"{set_code}:{position}:{current_card.id}",
+        current_card.translation,
+        all_translations,
+    )
 
     return QuizQuestion(
         set_code=word_set.code,
@@ -1315,7 +1354,6 @@ def build_weak_quiz_question(
 
     current_card = weak_cards[position - 1]
     language = get_user_language(session, telegram_id)
-    question_random = random.Random(f"weak:{telegram_id}:{position}:{current_card.id}")
     all_translations = list(
         session.scalars(
             select(WordCard.translation)
@@ -1327,12 +1365,11 @@ def build_weak_quiz_question(
             )
         )
     )
-    distractors = question_random.sample(all_translations, k=min(3, len(all_translations)))
-    while len(distractors) < 3:
-        distractors.append(f"Вариант {len(distractors) + 1}")
-
-    options = distractors + [current_card.translation]
-    question_random.shuffle(options)
+    options = build_answer_options(
+        f"weak:{telegram_id}:{position}:{current_card.id}",
+        current_card.translation,
+        all_translations,
+    )
     return QuizQuestion(
         set_code="weak",
         set_title="Повторение ошибок",
@@ -1390,7 +1427,6 @@ def build_survival_quiz_question(
         return None
 
     current_card = cards[position - 1]
-    question_random = random.Random(f"survival:{telegram_id}:{position}:{current_card.id}")
     all_translations = list(
         session.scalars(
             select(WordCard.translation)
@@ -1402,12 +1438,11 @@ def build_survival_quiz_question(
             )
         )
     )
-    distractors = question_random.sample(all_translations, k=min(3, len(all_translations)))
-    while len(distractors) < 3:
-        distractors.append(f"Вариант {len(distractors) + 1}")
-
-    options = distractors + [current_card.translation]
-    question_random.shuffle(options)
+    options = build_answer_options(
+        f"survival:{telegram_id}:{position}:{current_card.id}",
+        current_card.translation,
+        all_translations,
+    )
     return QuizQuestion(
         set_code="survival",
         set_title="До первой ошибки",
@@ -1444,7 +1479,6 @@ def build_dictionary_quiz_question(
         return None
 
     current_card = cards[position - 1]
-    question_random = random.Random(f"dictionary:{telegram_id}:{position}:{current_card.id}")
     all_translations = list(
         session.scalars(
             select(WordCard.translation)
@@ -1456,12 +1490,11 @@ def build_dictionary_quiz_question(
             )
         )
     )
-    distractors = question_random.sample(all_translations, k=min(3, len(all_translations)))
-    while len(distractors) < 3:
-        distractors.append(f"Вариант {len(distractors) + 1}")
-
-    options = distractors + [current_card.translation]
-    question_random.shuffle(options)
+    options = build_answer_options(
+        f"dictionary:{telegram_id}:{position}:{current_card.id}",
+        current_card.translation,
+        all_translations,
+    )
     return QuizQuestion(
         set_code="dictionary",
         set_title="Мой словарь",
